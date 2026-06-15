@@ -1,0 +1,10 @@
+<html>
+<body>
+<h1>Translate XSS Test</h1>
+<script>
+document.write("<h2>document.domain = " + document.domain + "</h2>");
+document.write("<h2>document.cookie = " + document.cookie + "</h2>");
+document.write("<h2>location.origin = " + location.origin + "</h2>");
+</script>
+</body>
+</html>
